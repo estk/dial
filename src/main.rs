@@ -9,8 +9,7 @@ use tokio::net::ConnectFuture;
 use std::io;
 use std::net::{SocketAddr};
 
-// use futures::task::Context;
-// use futures::{Async, , Poll};
+use futures::future::select_ok;
 
 use tokio::prelude::*;
 use tokio_tcp::TcpStream;
@@ -51,37 +50,6 @@ pub fn dial(host: &'static str, port: u16) -> ResolveResult<Box<Future<Item = Tc
 
 pub fn happy_connect(ips: LookupIp, port: u16) -> impl Future<Item = TcpStream, Error = impl std::error::Error> {
     let socks = ips.iter().map(|x| SocketAddr::new(x, port));
-    Connecting::new(socks)
-}
-
-#[derive(Debug)]
-struct Connecting {
-    addrs: Vec<SocketAddr>,
-    conns: Vec<ConnectFuture>
-}
-impl Connecting {
-    pub fn new(addrs: impl Iterator<Item=SocketAddr>) -> Self {
-        Connecting{addrs: addrs.collect(), conns: vec![]}
-    }
-}
-
-impl Future for Connecting {
-    type Item = TcpStream;
-    type Error = io::Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.addrs.reverse();
-        for sock in &mut self.addrs {
-            println!("connecting: {:?}", sock);
-            self.conns.push(TcpStream::connect(sock));
-        }
-        self.addrs.clear();
-        // TODO: how to race these
-        for c in &mut self.conns {
-            if let Ok(Async::Ready(x)) = c.poll() {
-                return Ok(Async::Ready(x))
-            }
-        }
-        Ok(Async::NotReady)
-    }
-
+    let conns = socks.map(|s| TcpStream::connect(&s) );
+    select_ok(conns).map(|(x, _)| x)
 }

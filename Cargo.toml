@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Evan Simmons <evan.simmons@creditkarma.com>"]
 
 [dependencies]
-futures = "0.2.1"
+futures = "0.1.21"
 log = "0.4.1"
 tokio-tcp = "0.1.0"
 trust-dns-resolver = "0.9.0"
