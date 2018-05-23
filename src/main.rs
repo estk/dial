@@ -55,15 +55,28 @@ impl Default for Dialer {
             resolution_delay: 50, // unused
             first_addr_family_count: 1, // unused
             conn_attempt_delay: 250,
-            min_conn_delay: 100,
-            max_conn_delay: 2000,
-            last_resort_local_synthesis_delay: 2000,
+            min_conn_delay: 100, // unused
+            max_conn_delay: 2000, // unused
+            last_resort_local_synthesis_delay: 2000, // unused
         }
     }
 }
 
+    pub fn dial<T: AsRef<Dialer>>(dialer: T, host: &'static str, port: u16) -> ResolveResult<impl Future<Item = TcpStream, Error = Box<std::error::Error>>> {
+        debug!("dialing: {}, {}", host, port);
+        let ip_fut = dialer.as_ref().resolve(host)?;
+        let res = ip_fut
+            .map_err(|e| e.into())
+            .and_then(move |ips| {
+                let socks = ips.iter().map(move |x| SocketAddr::new(x, port)).collect::<Vec<SocketAddr>>();
+                dialer.as_ref().happy_connect(socks.into_iter()).map_err(|e| e.into())
+            });
+        Ok(Box::new(res))
+    }
+
 impl Dialer {
-    pub fn dial(self, host: &'static str, port: u16) -> ResolveResult<impl Future<Item = TcpStream, Error = Box<std::error::Error>>> {
+    pub fn dial(&self, host: &'static str, port: u16) -> ResolveResult<impl Future<Item = TcpStream, Error = Box<std::error::Error>>> {
+        let dialer = self.as_ref();
         debug!("dialing: {}, {}", host, port);
         let ip_fut = self.resolve(host)?;
         let res = ip_fut
@@ -111,14 +124,6 @@ impl Dialer {
         }).map_err(|e| panic!("delay errored; err={:?}", e)))
     }
 }
-
-pub fn dial(host: &'static str, port: u16) -> ResolveResult<impl Future<Item = TcpStream, Error = Box<std::error::Error>>> {
-    Dialer::default().dial(host, port)
-}
-
-
-
-
 
 
 
