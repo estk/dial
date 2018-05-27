@@ -8,11 +8,9 @@ extern crate trust_dns_resolver;
 
 use futures::sync::oneshot;
 use std::net::IpAddr;
-use trust_dns_resolver::lookup_ip::LookupIp;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
-use tokio::prelude::stream::futures_unordered;
+use trust_dns_resolver::lookup_ip::LookupIp;
 
 use futures::Future;
 
@@ -86,8 +84,7 @@ impl Dialer {
         // resolve should be a stream
         let (v4, v6) = self.resolve(host)?;
         let ordered = self.order(v4, v6);
-        let socks = ordered
-            .map(|ip| SocketAddr::new(ip, port));
+        let socks = ordered.map(|ip| SocketAddr::new(ip, port));
 
         Ok(Box::new(self.connect(socks)))
     }
@@ -104,27 +101,28 @@ impl Dialer {
         } else {
             unblock_v4.send(());
         }
-        tokio::spawn(v4
-            .map_err(|e| eprintln!("accept failed = {:?}", e))
-            .and_then(|lip| {
-                unblock_v6.send(());
-                blocked_v4.and_then(|_| {
-                    stream::iter_ok(lip.iter()).and_then(|ip| {
-                        tx.send(ip)
-                })
-                .into()
-            })
-        }));
-        tokio::spawn(v6
-            .map_err(|e| eprintln!("accept failed = {:?}", e))
-            .and_then(|lip| {
-                unblock_v4.send(());
-                blocked_v6.and_then(|_| {
-                    stream::iter_ok(lip.iter()).and_then(|ip| {
-                        tx.send(ip)
-                    }).into()
-                })
-        }));
+        tokio::spawn(
+            v4.map_err(|e| eprintln!("accept failed = {:?}", e))
+                .and_then(|lip| {
+                    unblock_v6.send(());
+                    blocked_v4.and_then(|_| {
+                        stream::iter_ok(lip.iter())
+                            .and_then(|ip| tx.send(ip))
+                            .into()
+                    })
+                }),
+        );
+        tokio::spawn(
+            v6.map_err(|e| eprintln!("accept failed = {:?}", e))
+                .and_then(|lip| {
+                    unblock_v4.send(());
+                    blocked_v6.and_then(|_| {
+                        stream::iter_ok(lip.iter())
+                            .and_then(|ip| tx.send(ip))
+                            .into()
+                    })
+                }),
+        );
         // interleave v4 and v6
 
         rx
@@ -132,7 +130,10 @@ impl Dialer {
     pub fn resolve(
         &self,
         host: &'static str,
-    ) -> ResolveResult<(impl Future<Item = LookupIp, Error = ResolveError>, impl Future<Item = LookupIp, Error = ResolveError>)> {
+    ) -> ResolveResult<(
+        impl Future<Item = LookupIp, Error = ResolveError>,
+        impl Future<Item = LookupIp, Error = ResolveError>,
+    )> {
         debug!("resolving: {}", host);
         let (conf, opts) = read_system_conf()?;
         // read_system_conf just returns the ::default opts
@@ -150,8 +151,7 @@ impl Dialer {
     }
     pub fn connect(
         &self,
-        socks: impl Stream<Item = SocketAddr, Error = ResolveError>,
-
+        socks: impl Stream<Item = SocketAddr, Error = ()>,
     ) -> Box<Future<Item = TcpStream, Error = Box<std::error::Error>>> {
         debug!("Connect");
         // let now = Instant::now();
