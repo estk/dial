@@ -65,7 +65,7 @@ struct Dialer {
 impl Default for Dialer {
     fn default() -> Self {
         Self {
-            prefer_v6: true,
+            prefer_v6: false,
             resolution_delay: 50,       // unused
             first_addr_family_count: 1, // unused
             conn_attempt_delay: 250,
@@ -172,7 +172,7 @@ impl Dialer {
                 .map(|_| ())
         );
         // interleave v4 and v6
-        Box::new(v6_rx)
+        Box::new(v4_rx)
     }
     pub fn resolve(
         &self,
